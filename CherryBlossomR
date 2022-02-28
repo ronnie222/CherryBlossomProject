@@ -1,0 +1,91 @@
+library(ggplot2)
+library(rnoaa)
+
+#Data facts about Kyoto bloom day
+kyoto
+
+avg_bloom_day_kyoto <- mean(kyoto$bloom_doy)
+  
+hist(kyoto$bloom_doy)
+     
+#Daily Temperature     
+stations <- ghcnd_stations()
+table(stations$element)
+head(stations)
+
+lat <- 35.01198
+lon <- 135.6761
+
+distances <- sqrt((stations$latitude - lat)^2 + (stations$longitude - lon)^2)
+
+View(stations[distances < .5, ])
+
+temp <- ghcnd_search(stationid = "JA000047759")
+
+avg <-temp$tavg
+min <-temp$tmin
+max <-temp$tmax
+
+##correcting the avg and min temperatures
+
+temp$tavg = temp$tavg*(1.8/10) + 32
+
+temp$tavg = temp$tavg*(1.8/10) + 32
+
+
+#merging datasets
+kyoto$bloom_date_updt = as.Date(kyoto$bloom_date, format =  "%Y-%m-%d")
+
+colnames(kyoto)[8] <- "date"
+
+mergeKyotoAvg <- merge(kyoto,avg, by='date')
+
+mergeMinAvg <- merge(mergeKyotoAvg,min, by='date')
+
+
+
+##loop through the data set to count the amount of days with temperature between
+##27 and 45 on average and below 27 minimum before bloom day for each year
+
+above39 = data.frame(matrix(ncol = 3, nrow = 0))
+colnames(above39) = c("ideal","minBelow27","year")
+
+for(i in 1:length(mergeKyotoAvg$date)){
+  
+  ##create the date range
+  date = as.character(mergeKyotoAvg$date[i])
+  
+  dateJan = as.character(mergeMinAvg$date[i] - mergeMinAvg$bloom_doy[i] - 31)
+  
+  ##subset the temperature average data by the date range
+  subSetAvg = avg[avg$date >= dateJan & avg$date <= date,]  
+  subSetMin = min[min$date >= dateJan & min$date <= date,]
+  n = 0
+  a = 0
+  ##count the amount of days within the year above 39 degrees average
+  for(j in 1:length(subSetAvg$tavg)){
+  
+    if(is.na(subSetAvg$tavg[j]) == FALSE && subSetAvg$tavg[j] < 45 && subSetAvg$tavg[j] > 27){
+      
+      n = n + 1
+    }
+    
+     else if(is.na(subSetMin$tmin[j]) == FALSE && subSetMin$tmin[j] < 27){
+      
+      a = a + 1
+    }
+    
+   
+  }
+  above39[nrow(above39) + 1,] = c(n,a,mergeKyotoAvg$year[i])
+}
+
+
+
+mergeKyoto39 <- merge(mergeKyotoAvg, above39, by='year')
+
+##the model is pretty good at predicting the values for bloom day
+
+x = lm(mergeKyoto39$bloom_doy ~ mergeKyoto39$ideal + mergeKyoto39$below27)
+
+summary(x)
